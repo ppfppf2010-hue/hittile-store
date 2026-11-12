@@ -51,6 +51,13 @@
   .card .photo{
     width:100%; aspect-ratio:1/1; object-fit:cover; background:#E5E7EB; display:block;
   }
+  .card-arrow{
+    position:absolute; top:50%; transform:translateY(-50%);
+    width:30px; height:30px; border-radius:50%; border:none; padding:0;
+    background:rgba(0,0,0,0.45); color:#fff; font-size:18px; line-height:30px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .card-arrow:active{background:rgba(0,0,0,0.65);}
   .card .meta{padding:10px 12px;}
   .card .num{font-size:14px; font-weight:600; margin:0 0 2px;}
   .card .sub{font-size:12px; color:var(--text-secondary); margin:0;}
@@ -284,21 +291,37 @@ function render(){
     }
     photoWrap.appendChild(img);
 
+    let swiped = false;
     if(g.images.length > 1){
       const dots = document.createElement("div");
       dots.style.cssText = "position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:5px;";
+      const show = (i)=>{
+        activeIdx = (i + g.images.length) % g.images.length;
+        img.src = g.images[activeIdx];
+        [...dots.children].forEach((d,di)=>{ d.style.background = di===activeIdx ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.5)"; });
+      };
       g.images.forEach((src, i)=>{
         const dot = document.createElement("span");
-        dot.style.cssText = "width:7px;height:7px;border-radius:50%;cursor:pointer;box-shadow:0 0 2px rgba(0,0,0,0.5);background:" + (i===0 ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.5)");
-        dot.addEventListener("click", (e)=>{
-          e.stopPropagation();
-          activeIdx = i;
-          img.src = src;
-          [...dots.children].forEach((d,di)=>{ d.style.background = di===i ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.5)"; });
-        });
+        dot.style.cssText = "width:8px;height:8px;border-radius:50%;cursor:pointer;box-shadow:0 0 2px rgba(0,0,0,0.5);background:" + (i===0 ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.5)");
+        dot.addEventListener("click", (e)=>{ e.stopPropagation(); show(i); });
         dots.appendChild(dot);
       });
       photoWrap.appendChild(dots);
+
+      // 카드 좌우 화살표
+      [["‹", -1, "left"], ["›", 1, "right"]].forEach(([label, step, side])=>{
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "card-arrow";
+        b.textContent = label;
+        b.setAttribute("aria-label", step < 0 ? "이전 사진" : "다음 사진");
+        b.style[side] = "6px";
+        b.addEventListener("click", (e)=>{ e.stopPropagation(); show(activeIdx + step); });
+        photoWrap.appendChild(b);
+      });
+
+      // 손가락으로 밀어서 넘기기
+      addSwipe(img, (dir)=>{ swiped = true; setTimeout(()=>{ swiped = false; }, 400); show(activeIdx + dir); });
 
       const countBadge = document.createElement("div");
       countBadge.textContent = g.images.length + "장";
@@ -308,6 +331,7 @@ function render(){
 
     if(hasImages){
       img.addEventListener("click", ()=>{
+        if(swiped){ swiped = false; return; }
         openPhotoModal(g.images, activeIdx, g.num);
       });
     }
@@ -406,6 +430,28 @@ document.getElementById("nextPhoto").addEventListener("click", (e)=>{
   modalIndex = (modalIndex + 1) % modalImages.length;
   updateModalImage();
 });
+// 크게 보기 화면에서도 밀어서 넘기기
+addSwipe(document.getElementById("photoModalImg"), (dir)=>{
+  if(modalImages.length < 2) return;
+  modalIndex = (modalIndex + dir + modalImages.length) % modalImages.length;
+  updateModalImage();
+});
+
+// 왼쪽으로 밀면 다음(+1), 오른쪽으로 밀면 이전(-1)
+function addSwipe(el, onSwipe){
+  let x0 = null, y0 = null;
+  el.style.touchAction = "pan-y";
+  el.addEventListener("dragstart", (e)=> e.preventDefault());
+  el.addEventListener("pointerdown", (e)=>{ x0 = e.clientX; y0 = e.clientY; });
+  el.addEventListener("pointercancel", ()=>{ x0 = null; });
+  el.addEventListener("pointerup", (e)=>{
+    if(x0 === null) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    x0 = null;
+    if(Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) onSwipe(dx < 0 ? 1 : -1);
+  });
+}
+
 document.addEventListener("keydown", (e)=>{
   if(!document.getElementById("photoModal").classList.contains("show")) return;
   if(e.key === "ArrowLeft"){ modalIndex = (modalIndex - 1 + modalImages.length) % modalImages.length; updateModalImage(); }
